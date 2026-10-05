@@ -9,7 +9,7 @@
 
 function runSmartGmailTriageAI() {
   const apiKey = typeof GEMINI_API_KEY !== 'undefined' ? GEMINI_API_KEY : "PASTE_YOUR_AI_STUDIO_KEY_HERE";
-  const modelName = "gemini-2.5-flash"; // Valid Google AI Studio endpoint[cite: 1]
+  const modelName = "gemini-3.8-flash"; // Valid Google AI Studio endpoint[cite: 1]
   const timeZone = "America/Los_Angeles";
 
   // 1. Ingest Inbox Emails (Past 24 Hours)[cite: 1, 2, 4]
