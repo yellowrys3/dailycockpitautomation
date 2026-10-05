@@ -1,20 +1,18 @@
-
 /**
  * LAYER 1 / SUPPORTING AUTOMATION 1: Smart Gmail & Spam Triage via Gemini AI
- * Runs daily at 8:00 AM (Scheduled or manual)
+ * Runs daily at 8:00 AM (Scheduled cron or manual trigger)
  * 1. Pulls emails received in Inbox and Spam in the past 24 hours.
  * 2. Extracts compact metadata (Sender, Subject, 150-char snippet).
- * 3. Sends context to Gemini Flash for intelligent priority/spam classification.
- * 4. Stages a structured proposal log and waits for human approval before applying labels.
+ * 3. Sends context to Gemini Flash for intelligent priority/spam classification[cite: 1, 2].
+ * 4. Buffers plan in PropertiesService for zero-argument human approval[cite: 1, 2, 4].
  */
 
-const GEMINI_API_KEY = "PASTE_YOUR_AI_STUDIO_KEY_HERE";
-const MODEL_NAME = "gemini-3.8-flash"; // Free tier model
-
 function runSmartGmailTriageAI() {
+  const apiKey = typeof GEMINI_API_KEY !== 'undefined' ? GEMINI_API_KEY : "PASTE_YOUR_AI_STUDIO_KEY_HERE";
+  const modelName = "gemini-2.5-flash"; // Valid Google AI Studio endpoint[cite: 1]
   const timeZone = "America/Los_Angeles";
 
-  // 1. Ingest Inbox Emails (Past 24 Hours)
+  // 1. Ingest Inbox Emails (Past 24 Hours)[cite: 1, 2, 4]
   const inboxThreads = GmailApp.search("in:inbox newer_than:1d", 0, 20);
   const inboxPayload = inboxThreads.map(thread => {
     const firstMsg = thread.getMessages()[0];
@@ -29,7 +27,7 @@ function runSmartGmailTriageAI() {
     };
   });
 
-  // 2. Ingest Spam Emails (Past 24 Hours) to detect false positives
+  // 2. Ingest Spam Emails (Past 24 Hours) to detect false positives[cite: 1, 2, 4]
   const spamThreads = GmailApp.search("in:spam newer_than:1d", 0, 15);
   const spamPayload = spamThreads.map(thread => {
     const firstMsg = thread.getMessages()[0];
@@ -51,7 +49,7 @@ function runSmartGmailTriageAI() {
 
   Logger.log(`Ingested ${inboxPayload.length} inbox threads and ${spamPayload.length} spam threads.`);
 
-  // 3. Construct Gemini Prompt for Triage
+  // 3. Construct Gemini Prompt for Triage[cite: 1, 2, 4]
   const prompt = `
 You are the Smart Gmail Triage Engine for a university student.
 
@@ -80,7 +78,7 @@ ${JSON.stringify(spamPayload, null, 2)}
 `;
 
   Logger.log("🧠 Calling Gemini Flash for semantic email classification...");
-  const rawResponse = callGeminiApiDirect(prompt);
+  const rawResponse = callGeminiApiDirect(prompt, apiKey, modelName);
 
   // Clean markdown delimiters if present
   const cleanedJson = rawResponse.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -92,37 +90,43 @@ ${JSON.stringify(spamPayload, null, 2)}
     throw new Error("Could not parse Gemini JSON response.");
   }
 
-  // 4. Output Staged Briefing for Human Review
-  Logger.log("================ 📬 GMAIL AI TRIAGE PROPOSAL ================");
-  Logger.log("Summary: " + parsed.summary);
-  Logger.log(`🚨 False Positives to Restore from Spam (${parsed.restoreSpamThreadIds.length}): ` + parsed.restoreSpamThreadIds.join(", "));
-  Logger.log(`⭐ Important Emails to Flag (${parsed.importantThreadIds.length}): ` + parsed.importantThreadIds.join(", "));
-  Logger.log(`🗑️ Promotional Emails to Move to Deletion (${parsed.deletionThreadIds.length}): ` + parsed.deletionThreadIds.join(", "));
-  Logger.log("============================================================");
+  // 4. Staging Buffer: Save in PropertiesService for human approval[cite: 1, 2, 4]
+  const userProperties = PropertiesService.getUserProperties();
+  userProperties.setProperty("STAGED_GMAIL_PLAN", JSON.stringify(parsed));
 
-  // 5. Execution Status Log Entry (08:00 PST format)
+  // 5. Output Staged Briefing for Human Review[cite: 1, 2, 4]
+  Logger.log("\n================ 📬 GMAIL AI TRIAGE PROPOSAL ================");
+  Logger.log("Summary: " + parsed.summary);
+  Logger.log(`🚨 False Positives to Restore from Spam (${(parsed.restoreSpamThreadIds || []).length}): ` + (parsed.restoreSpamThreadIds || []).join(", "));
+  Logger.log(`⭐ Important Emails to Flag (${(parsed.importantThreadIds || []).length}): ` + (parsed.importantThreadIds || []).join(", "));
+  Logger.log(`🗑️ Promotional Emails to Move to Deletion (${(parsed.deletionThreadIds || []).length}): ` + (parsed.deletionThreadIds || []).join(", "));
+  Logger.log("============================================================");
+  Logger.log("👉 NEXT STEP TO APPROVE: Select 'approveAndCommitGmailTriage' in the function dropdown and click Run.\n");
+
+  // 6. Execution Status Log Entry (08:00 PST format)[cite: 1, 2, 4]
   const timeStr = Utilities.formatDate(new Date(), timeZone, "HH:mm");
   const dateStr = Utilities.formatDate(new Date(), timeZone, "MM/dd/yyyy");
   Logger.log(`[Activity Log]: • Staged, ${timeStr} PST, ${dateStr}, Gmail Triage Proposal Staged via AI`);
-
-  // Returns staged plan for human review
-  return parsed;
 }
 
 /**
- * HUMAN-IN-THE-LOOP COMMIT GATE
- * Run this function with the object returned by runSmartGmailTriageAI() after verifying the log.
+ * HUMAN-IN-THE-LOOP COMMIT GATE (Zero-argument execution)[cite: 1, 2, 4]
+ * Run this function from the dropdown to execute approved email updates.
  */
-function applyApprovedEmailChanges(stagedPlan) {
-  if (!stagedPlan) {
-    Logger.log("No valid staged plan provided. Execution cancelled.");
+function approveAndCommitGmailTriage() {
+  const userProperties = PropertiesService.getUserProperties();
+  const rawData = userProperties.getProperty("STAGED_GMAIL_PLAN");
+
+  if (!rawData) {
+    Logger.log("⚠️ No staged email actions found. Run 'runSmartGmailTriageAI' first.");
     return;
   }
 
+  const stagedPlan = JSON.parse(rawData);
   const importantLabel = getOrCreateLabel("Important Emails");
   const deletionLabel = getOrCreateLabel("Email for Deletion");
 
-  // 1. Restore false positives from spam -> inbox + Important
+  // 1. Restore false positives from spam -> inbox + Important[cite: 1, 2, 4]
   (stagedPlan.restoreSpamThreadIds || []).forEach(id => {
     try {
       const thread = GmailApp.getThreadById(id);
@@ -134,7 +138,7 @@ function applyApprovedEmailChanges(stagedPlan) {
     }
   });
 
-  // 2. Mark important inbox threads
+  // 2. Mark important inbox threads[cite: 1, 2, 4]
   (stagedPlan.importantThreadIds || []).forEach(id => {
     try {
       const thread = GmailApp.getThreadById(id);
@@ -145,7 +149,7 @@ function applyApprovedEmailChanges(stagedPlan) {
     }
   });
 
-  // 3. Label deletion candidates & archive from inbox
+  // 3. Label deletion candidates & archive from inbox[cite: 1, 2, 4]
   (stagedPlan.deletionThreadIds || []).forEach(id => {
     try {
       const thread = GmailApp.getThreadById(id);
@@ -156,19 +160,21 @@ function applyApprovedEmailChanges(stagedPlan) {
     }
   });
 
+  // Clear buffer on success[cite: 1, 4]
+  userProperties.deleteProperty("STAGED_GMAIL_PLAN");
   Logger.log("✅ Successfully executed approved Gmail label updates and cleanups.");
 }
 
 /**
- * Gemini API Request Wrapper
+ * Gemini API Request Wrapper[cite: 1]
  */
-function callGeminiApiDirect(promptText) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
+function callGeminiApiDirect(promptText, key, model) {
+  const url = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent?key=${key}`;
   
   const payload = {
     contents: [{ parts: [{ text: promptText }] }],
     generationConfig: {
-      temperature: 0.1 // Minimal temperature for strict, reliable JSON output
+      temperature: 0.1 // Low temperature for deterministic classification
     }
   };
 
@@ -192,7 +198,7 @@ function callGeminiApiDirect(promptText) {
 }
 
 /**
- * Label Helper
+ * Helper to fetch or create label
  */
 function getOrCreateLabel(name) {
   return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
