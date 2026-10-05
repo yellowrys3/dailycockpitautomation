@@ -10,7 +10,7 @@
 function runEventPrepScannerAI() {
   // Read shared config from your central Config.gs or declare locally
   const apiKey = typeof GEMINI_API_KEY !== 'undefined' ? GEMINI_API_KEY : "PASTE_YOUR_AI_STUDIO_KEY_HERE";
-  const modelName = "gemini-2.5-flash"; // Fixed to standard Google AI Studio endpoint[cite: 1, 2]
+  const modelName = "gemini-3.8-flash"; // Fixed to standard Google AI Studio endpoint[cite: 1, 2]
 
   const lookaheadDays = 14;
   const now = new Date();
