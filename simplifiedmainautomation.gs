@@ -1,4 +1,3 @@
-
 /**
  * GDG UCSD - Daily Cockpit Apps Script Fallback
  * Ingests Calendar & Gmail data, calls Gemini API via UrlFetchApp, and logs the synthesized brief.
