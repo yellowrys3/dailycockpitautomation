@@ -1,19 +1,15 @@
 /**
  * LAYER 1 / SUPPORTING AUTOMATION 2: Canvas Pacing & Task Breakdown via Gemini
  * Runs daily at 8:15 AM (Scheduled cron or manual trigger)
- * 1. Ingests Canvas/UCSD calendar events over the next 14 days.
- * 2. Cross-references active Google Tasks to prevent duplicate prep blocks.
+ * 
+ * NOTE: Uses GEMINI_API_KEY and MODEL_NAME from Config.gs directly.
+ * 1. Ingests Canvas/UCSD calendar events over next 14 days.
+ * 2. Cross-references active Google Tasks to prevent duplicate staging.
  * 3. Sends context to Gemini Flash with workload heuristics.
- * 4. Stores proposals in UserProperties buffer for zero-argument human approval.
+ * 4. Buffers tasks in PropertiesService for human approval before committing[cite: 1, 4].
  */
 
 function runEventPrepScannerAI() {
-  // Directly accessible because Config.gs is in the same project!
-  Logger.log("Using model: " + MODEL_NAME); 
-  const rawResponse = callGeminiApiDirect(promptText);
-  // ...
-}
-
   const lookaheadDays = 14;
   const now = new Date();
   const endDate = new Date(now.getTime() + lookaheadDays * 24 * 60 * 60 * 1000);
@@ -41,22 +37,28 @@ function runEventPrepScannerAI() {
 
   if (upcomingEvents.length === 0) {
     Logger.log("No upcoming Canvas or UCSD events found in the next 14 days.");
-    return;
+    return [];
   }
 
   // 2. Fetch existing Google Tasks to avoid duplicate staging[cite: 1, 4]
   let existingTitles = [];
+  let targetTaskListId = "@default";
+
   try {
-    const existing = Tasks.Tasks.list("@default", { showCompleted: false }).items || [];
-    existingTitles = existing.map(t => (t.title || "").trim());
+    const taskLists = Tasks.Tasklists.list().items || [];
+    if (taskLists.length > 0) {
+      targetTaskListId = taskLists[0].id;
+    }
+    const existingTasks = Tasks.Tasks.list(targetTaskListId, { showCompleted: false }).items || [];
+    existingTitles = existingTasks.map(t => (t.title || "").trim());
   } catch (err) {
-    Logger.log("⚠️ Tasks service warning (ensure Advanced Service is added): " + err.message);
+    Logger.log("⚠️ Tasks service warning (Make sure Tasks is added under Services): " + err.message);
   }
 
   Logger.log(`Found ${upcomingEvents.length} events across ${relevantCalendars.length} target calendar(s).`);
   Logger.log(`Cross-referencing with ${existingTitles.length} active Google Tasks.`);
 
-  // 3. Construct Gemini Prompt with Workload Heuristics[cite: 1, 4]
+  // 3. Prompt Gemini with strict Workload Evaluation Rules[cite: 1, 4]
   const prompt = `
 You are the Academic Task Breakdown & Pacing Engine for a university student.
 
@@ -74,9 +76,11 @@ ${existingTitles.length > 0 ? existingTitles.map(t => `- ${t}`).join("\n") : "No
 - Standard chunk size: 60 to 90 minutes per session block.
 
 [INSTRUCTIONS]:
-1. Evaluate each event's scope and break it down into sequential chunked deliverables (e.g., "[Prep 1/3] CSE 100 PA4: Baseline & Setup").
-2. Check existing scheduled tasks to avoid duplicating assignments already chunked.
-3. Return ONLY a valid JSON object matching the schema below. No markdown fences or commentary.
+1. Evaluate each event's title and description to determine its actual workload category.
+2. Check the [ALREADY SCHEDULED ACTIVE GOOGLE TASKS]. DO NOT generate a prep task if a subtask or prep slot for that event has already been created.
+3. Divide eligible assignments into sequential chunked deliverables (e.g., "[Prep 1/3] CSE 100 PA4: Baseline & Setup", "[Prep 2/3] CSE 100 PA4: Core Implementation").
+4. Assign each chunk a proposed completion target date before the actual deadline.
+5. Return ONLY a valid JSON object matching the schema below. Do not wrap in markdown quotes or commentary.
 
 {
   "summary": "1-sentence briefing on workload distribution",
@@ -92,7 +96,7 @@ ${existingTitles.length > 0 ? existingTitles.map(t => `- ${t}`).join("\n") : "No
 `;
 
   Logger.log("🧠 Calling Gemini Flash for intelligent cognitive breakdown...");
-  const rawResponse = callGeminiApiDirect(prompt, apiKey, modelName);
+  const rawResponse = callGeminiApiDirect(prompt);
 
   // Clean markdown delimiters if returned
   const cleanedJson = rawResponse.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -104,29 +108,31 @@ ${existingTitles.length > 0 ? existingTitles.map(t => `- ${t}`).join("\n") : "No
     throw new Error("Could not parse Gemini JSON response.");
   }
 
-  // 4. Staging Buffer: Save in PropertiesService for human approval[cite: 1, 4]
+  // 4. SAVE TO PERSISTENT BUFFER (Stages tasks for human approval)[cite: 1, 4]
   const userProperties = PropertiesService.getUserProperties();
   userProperties.setProperty("STAGED_CANVAS_TASKS", JSON.stringify(parsed.proposedTasks || []));
 
-  // 5. Output Staged Briefing for Human Review[cite: 1, 4]
-  Logger.log("================ 📚 CANVAS AI BREAKDOWN PROPOSAL ================");
+  // 5. Output Staged Results to Execution Log for Review[cite: 1, 4]
+  Logger.log("\n================ 📚 CANVAS AI BREAKDOWN PROPOSAL ================");
   Logger.log("Summary: " + parsed.summary);
   (parsed.proposedTasks || []).forEach((t, i) => {
     Logger.log(`  [${i + 1}] ${t.title} | Target Date: ${t.dueDate} (${t.estimatedHours} hrs)`);
   });
   Logger.log("================================================================");
-  Logger.log("👉 NEXT STEP TO APPROVE: Select 'approveAndCommitCanvasTasks' in the function dropdown and click Run.\n");
+  Logger.log("👉 HUMAN APPROVAL REQUIRED:");
+  Logger.log("1. Review the proposed tasks above in this log.");
+  Logger.log("2. To approve & insert them into Google Tasks, switch the function dropdown to 'approveAndCommitCanvasTasks' and click Run.\n");
 
   // 6. Execution Status Log Entry (08:15 PST format)[cite: 1, 4]
   const timeZone = "America/Los_Angeles";
   const timeStr = Utilities.formatDate(new Date(), timeZone, "HH:mm");
   const dateStr = Utilities.formatDate(new Date(), timeZone, "MM/dd/yyyy");
-  Logger.log(`Execution Log Entry: • Staged, ${timeStr} PST, ${dateStr}, Proposed ${(parsed.proposedTasks || []).length} task blocks via AI`);
+  Logger.log(`• Staged, ${timeStr} PST, ${dateStr}, Proposed ${(parsed.proposedTasks || []).length} task blocks via AI`);
 }
 
 /**
  * HUMAN-IN-THE-LOOP COMMIT GATE (Zero-argument execution)[cite: 1, 4]
- * Run this function from the dropdown to write staged tasks to Google Tasks.
+ * Run this function from the dropdown to write staged tasks into Google Tasks.
  */
 function approveAndCommitCanvasTasks() {
   const userProperties = PropertiesService.getUserProperties();
@@ -155,16 +161,17 @@ function approveAndCommitCanvasTasks() {
     count++;
   });
 
-  // Clear buffer upon successful commit[cite: 1, 4]
+  // Clear buffer so you don't commit duplicates[cite: 1, 4]
   userProperties.deleteProperty("STAGED_CANVAS_TASKS");
-  Logger.log(`✅ Successfully inserted ${count} tasks into Google Tasks.`);
+  Logger.log(`✅ Successfully committed ${count} tasks into Google Tasks!`);
 }
 
 /**
- * Gemini API Request Wrapper[cite: 1, 2]
+ * Native UrlFetchApp wrapper for Gemini API[cite: 1]
+ * Uses GEMINI_API_KEY and MODEL_NAME from Config.gs
  */
-function callGeminiApiDirect(promptText, key, model) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+function callGeminiApiDirect(promptText) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
   
   const payload = {
     contents: [{ parts: [{ text: promptText }] }],
