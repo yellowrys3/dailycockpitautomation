@@ -4,9 +4,6 @@
  * Ingests Calendar & Gmail data, calls Gemini API via UrlFetchApp, and logs the synthesized brief.
  */
 
-const GEMINI_API_KEY = "[GEMINI API KEY GOES HERE]";
-const MODEL_NAME = "gemini-3.8-flash"; 
-
 function generateDailyCockpitFallback() {
   const today = new Date();
 
