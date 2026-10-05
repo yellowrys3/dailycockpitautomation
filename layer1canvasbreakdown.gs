@@ -184,6 +184,3 @@ function callGeminiApiDirect(promptText) {
 
   return json.candidates[0].content.parts[0].text;
 }
-
-  return proposedTasks;
-}
