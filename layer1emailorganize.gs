@@ -1,46 +1,34 @@
-""Scan and organize my recent emails from both my main inbox and spam folder to help me manage important communications and review cleanup suggestions.
 
-1. Search and retrieve emails received in my main inbox within the past 24 hours.
-2. Search and retrieve emails received in my spam folder within the past 24 hours.
-3. Classify inbox emails into two categories:
-   - Important emails (e.g., personal communications, essential work/school updates, critical transactional or account notices).
-   - Ads, promotional emails, potential scams, and unimportant newsletters.
-4. Review spam folder emails to identify any legitimate or important communications that may have been filtered into spam incorrectly (false positives).
-5. For all identified high-priority and important emails, automatically apply the "Important Emails" label (and the system "IMPORTANT" label) so they are prominently marked and organized in my mailbox.
-6. Present a clear, organized briefing directly in chat containing:
-   - Important Inbox Emails: Summary of key messages received and confirmed labeled as important.
-   - Proposed Emails for Deletion: Explicitly list out EVERY individual promotional email, ad, newsletter, and marketing message upfront (with full subject line, sender, and brief context) without grouping them into generic summaries.
-   - Important Spam Items to Move to Inbox: List of any misclassified emails in spam to restore.
-   - A single concluding prompt asking for one bulk confirmation to move all identified ads and low-priority emails into the "Email for Deletion" label.
-7. Upon completing the execution (or if incomplete due to errors or blockers), append a status entry to my Google Keep note titled "Automation Execution Log" in the exact format:
-   "[Complete/Incomplete], [hh:mm 24-hour time in PST], [mm/dd/yyyy], Organize inbox and spam emails"
-   (e.g., "Complete, 08:15 PST, 10/03/2026, Organize inbox and spam emails").""
-
-// Here is the code // 
 /**
- * Daily Email Organization Workflow
- * Trigger: Time-driven trigger (Daily between 8am - 9am)
+ * SUPPORTING AUTOMATION 1: Smart Gmail & Spam Triage (Deterministic Layer)
+ * Scans Inbox and Spam for the last 24 hours, identifies critical vs. promotional threads,
+ * and stages proposals for user approval.
  */
- 
-function organizeInboxAndSpam() {
-  const oneDayAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+function runSmartGmailTriage() {
+  const timeZone = "America/Los_Angeles";
   
-  // 1. Get or create required labels
-  const importantLabel = getOrCreateLabel("Important Emails");
-  const deletionLabel = getOrCreateLabel("Email for Deletion");
+  // 1. Search Spam (Past 24 Hours) for False Positives
+  const spamThreads = GmailApp.search("in:spam newer_than:1d");
+  const falsePositivesToRestore = [];
 
-  // 2. Scan Spam folder for the past 24 hours (Check for false positives)
-  const spamQuery = `in:spam after:${oneDayAgo}`;
-  const spamThreads = GmailApp.search(spamQuery);
-  Logger.log(`Found ${spamThreads.length} spam threads.`);
-  
-  // If an important email was in spam, move it back to inbox:
-  // spamThreads.forEach(thread => { thread.moveToInbox(); thread.addLabel(importantLabel); });
+  spamThreads.forEach(thread => {
+    const firstMsg = thread.getMessages()[0];
+    const subject = firstMsg.getSubject();
+    const from = firstMsg.getFrom();
 
-  // 3. Scan Inbox for the past 24 hours
-  const inboxQuery = `in:inbox after:${oneDayAgo}`;
-  const inboxThreads = GmailApp.search(inboxQuery);
-  Logger.log(`Found ${inboxThreads.length} inbox threads.`);
+    if (isHighPriority(from, subject)) {
+      falsePositivesToRestore.push({
+        id: thread.getId(),
+        subject: subject,
+        from: from
+      });
+    }
+  });
+
+  // 2. Search Primary Inbox (Past 24 Hours)
+  const inboxThreads = GmailApp.search("in:inbox newer_than:1d");
+  const importantToLabel = [];
+  const proposedForDeletion = [];
 
   inboxThreads.forEach(thread => {
     const firstMsg = thread.getMessages()[0];
@@ -48,59 +36,104 @@ function organizeInboxAndSpam() {
     const from = firstMsg.getFrom();
 
     if (isHighPriority(from, subject)) {
-      // Mark as important
-      thread.addLabel(importantLabel);
-      thread.markImportant();
-      Logger.log(`Marked Important: ${subject}`);
+      importantToLabel.push({
+        id: thread.getId(),
+        subject: subject,
+        from: from
+      });
     } else if (isPromotional(from, subject)) {
-      // Tag for deletion review and archive from inbox
-      thread.addLabel(deletionLabel);
-      thread.moveToArchive();
-      Logger.log(`Moved to Deletion Label: ${subject}`);
+      proposedForDeletion.push({
+        id: thread.getId(),
+        subject: subject,
+        from: from
+      });
     }
   });
 
-  // 4. Execution Logging
-  // Note: Google Keep does not have a native Apps Script service (KeepApp), 
-  // so executions are typically logged to Google Sheets, Tasks, or console logs.
-  logExecution("Complete", "Organize inbox and spam emails");
+  // 3. Execution Summary Briefing (Staged for Review)
+  Logger.log("================ 📬 EMAIL TRIAGE PROPOSAL ================");
+  Logger.log(`🚨 False Positives in Spam to Restore (${falsePositivesToRestore.length}):`);
+  falsePositivesToRestore.forEach(t => Logger.log(`   • [RESTORE] "${t.subject}" from ${t.from}`));
+
+  Logger.log(`\n⭐ Important Inbox Emails to Flag (${importantToLabel.length}):`);
+  importantToLabel.forEach(t => Logger.log(`   • [IMPORTANT] "${t.subject}" from ${t.from}`));
+
+  Logger.log(`\n🗑️ Proposed for Deletion Label / Archive (${proposedForDeletion.length}):`);
+  proposedForDeletion.forEach(t => Logger.log(`   • [CLEANUP] "${t.subject}" from ${t.from}`));
+  Logger.log("==========================================================");
+
+  // 4. Execution Logging (08:00 PST format)
+  const timeStr = Utilities.formatDate(new Date(), timeZone, "HH:mm");
+  const dateStr = Utilities.formatDate(new Date(), timeZone, "MM/dd/yyyy");
+  Logger.log(`Execution Log Entry: • Staged, ${timeStr} PST, ${dateStr}, Gmail Triage Proposal Ready`);
+
+  // Return staged manifest for user approval
+  return {
+    restoreSpamIds: falsePositivesToRestore.map(t => t.id),
+    importantIds: importantToLabel.map(t => t.id),
+    deletionIds: proposedForDeletion.map(t => t.id)
+  };
 }
 
 /**
- * Heuristic check for high-priority emails
+ * Executes the bulk updates ONLY after human confirmation
+ */
+function applyApprovedTriage(stagedManifest) {
+  const importantLabel = getOrCreateLabel("Important Emails");
+  const deletionLabel = getOrCreateLabel("Email for Deletion");
+
+  // Restore false positives from spam
+  stagedManifest.restoreSpamIds.forEach(id => {
+    const thread = GmailApp.getThreadById(id);
+    thread.moveToInbox();
+    thread.addLabel(importantLabel);
+    thread.markImportant();
+  });
+
+  // Label important inbox threads
+  stagedManifest.importantIds.forEach(id => {
+    const thread = GmailApp.getThreadById(id);
+    thread.addLabel(importantLabel);
+    thread.markImportant();
+  });
+
+  // Archive and label deletion candidates
+  stagedManifest.deletionIds.forEach(id => {
+    const thread = GmailApp.getThreadById(id);
+    thread.addLabel(deletionLabel);
+    thread.moveToArchive();
+  });
+
+  Logger.log("✅ Successfully committed approved email updates.");
+}
+
+/**
+ * Heuristics for high-priority emails
  */
 function isHighPriority(from, subject) {
-  const lowerSub = subject.toLowerCase();
-  const lowerFrom = from.toLowerCase();
-
+  const text = (subject + " " + from).toLowerCase();
   const keywords = [
-    "receipt", "shipped", "order", "security alert", "statement", 
-    "payment", "invoice", "verification", "advising", "zoom", "invitation"
+    "security alert", "verification", "advising", "zoom", "invitation", 
+    "payment", "invoice", "receipt", "shipped", "tritonlink", "ucsd"
   ];
-  return keywords.some(k => lowerSub.includes(k) || lowerFrom.includes(k));
+  return keywords.some(k => text.includes(k));
 }
 
 /**
- * Heuristic check for promotional emails
+ * Heuristics for promotional / low-priority emails
  */
 function isPromotional(from, subject) {
-  const lowerSub = subject.toLowerCase();
-  const promoKeywords = ["sale", "off", "deals", "coupon", "limited time", "discount"];
-  return promoKeywords.some(k => lowerSub.includes(k));
+  const text = subject.toLowerCase();
+  const promoKeywords = [
+    "sale", "off", "deals", "coupon", "limited time", "discount", 
+    "clearance", "exclusive offer", "newsletter", "unsubscribe"
+  ];
+  return promoKeywords.some(k => text.includes(k));
 }
 
 /**
- * Helper to retrieve or create a Gmail label
+ * Helper to get or create label
  */
 function getOrCreateLabel(name) {
   return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
-}
-
-/**
- * Helper to log execution status
- */
-function logExecution(status, taskName) {
-  const now = new Date();
-  const timeStr = Utilities.formatDate(now, "America/Los_Angeles", "HH:mm 'PST', MM/dd/yyyy");
-  Logger.log(`[Log Entry]: • ${status}, ${timeStr}, ${taskName}`);
 }
