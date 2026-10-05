@@ -9,7 +9,7 @@
  */
 
 const GEMINI_API_KEY = "PASTE_YOUR_AI_STUDIO_KEY_HERE";
-const MODEL_NAME = "gemini-2.5-flash"; // Free tier model
+const MODEL_NAME = "gemini-3.8-flash"; // Free tier model
 
 function runSmartGmailTriageAI() {
   const timeZone = "America/Los_Angeles";
