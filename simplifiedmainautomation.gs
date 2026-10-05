@@ -107,14 +107,14 @@ function saveBriefToDoc(briefText) {
  */
 function getPendingTasks() {
   try {
-    const taskLists = Tasks.Tasklists.list().getItems() || [];
+    const taskLists = Tasks.Tasklists.list().items || [];
     let allTasks = [];
 
     taskLists.forEach(list => {
       const tasks = Tasks.Tasks.list(list.id, {
         showCompleted: false,
         showHidden: false
-      }).getItems() || [];
+      }).items || [];
 
       tasks.forEach(t => {
         const dueStr = t.due ? ` (Due: ${t.due.slice(0, 10)})` : " (No date)";
