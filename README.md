@@ -67,19 +67,16 @@ Choose the deployment track that fits your technical comfort level:
 
 1. **Open Google Apps Script:**
    * Navigate to [script.google.com](https://script.google.com) and create a **New project**.
+   * Copy and paste the prompt from layer1canvasbreakdown.gs, layer1emailorganize.gs, and simplifiedmainautomation.gs in that singular project. 
 2. **Enable Google Tasks API:**
    * In the left sidebar, click the `+` next to **Services**.
    * Select **Google Tasks API**, keep the identifier as `Tasks`, and click **Add**[cite: 1].
 3. **Configure API Credentials:**
    * Get a free Gemini API key from [Google AI Studio](https://aistudio.google.com)[cite: 1].
-   * Create a `Config.gs` file and paste your credentials:
-     ```javascript
-     const GEMINI_API_KEY = "YOUR_API_KEY_HERE";
-     const MODEL_NAME = "gemini-2.5-flash";
-     ```
+   * Paste your credentials into the simplifiedmainautomation.gs, in areas that states PASTE HERE. 
 4. **Copy the Source Scripts:**
-   * Copy `s1code.gs` for Smart Gmail Triage.
-   * Copy `s2code.gs` for Canvas Calendar Pacing & Google Tasks generation.
+   * Copy `layer1emailorganize.gs` for Smart Gmail Triage.
+   * Copy `layer1canvvasbreakdow.gs` for Canvas Calendar Pacing & Google Tasks generation.
 5. **Set Morning Clock Triggers:**
    * In Apps Script, go to **Triggers** (clock icon on the left) → **Add Trigger**.
    * Bind `runSmartGmailTriageAI` to a time-driven trigger for **8:00 AM to 9:00 AM**[cite: 1, 2].
