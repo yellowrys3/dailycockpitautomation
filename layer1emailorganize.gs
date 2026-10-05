@@ -1,6 +1,6 @@
 
 /**
- * SUPPORTING AUTOMATION 1: Smart Gmail & Spam Triage via Gemini AI
+ * LAYER 1 / SUPPORTING AUTOMATION 1: Smart Gmail & Spam Triage via Gemini AI
  * Runs daily at 8:00 AM (Scheduled or manual)
  * 1. Pulls emails received in Inbox and Spam in the past 24 hours.
  * 2. Extracts compact metadata (Sender, Subject, 150-char snippet).
