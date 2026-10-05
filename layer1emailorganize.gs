@@ -8,9 +8,11 @@
  */
 
 function runSmartGmailTriageAI() {
-  const apiKey = typeof GEMINI_API_KEY !== 'undefined' ? GEMINI_API_KEY : "PASTE_YOUR_AI_STUDIO_KEY_HERE";
-  const modelName = "gemini-3.8-flash"; // Valid Google AI Studio endpoint[cite: 1]
-  const timeZone = "America/Los_Angeles";
+  // Directly accessible because Config.gs is in the same project!
+  Logger.log("Using model: " + MODEL_NAME); 
+  const rawResponse = callGeminiApiDirect(promptText);
+  // ...
+}
 
   // 1. Ingest Inbox Emails (Past 24 Hours)[cite: 1, 2, 4]
   const inboxThreads = GmailApp.search("in:inbox newer_than:1d", 0, 20);
