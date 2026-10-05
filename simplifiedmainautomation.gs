@@ -1,3 +1,18 @@
+""Review my Google Calendar, Google Tasks, Gmail data, and Google Keep note "Weekly Schedule for Fall 2026" for today, synthesize my Daily Cockpit action brief, and update my Google Keep note:
+
+1. Access my Google Keep note titled "Automation Execution Log" and check entries for today's date. Verify that both "Plan event preparation tasks" and "Organize inbox and spam emails" (clean email tasks) are marked as "Complete" on today's date. If either task is not logged as complete for today, stop execution, return an error message to me stating that prerequisite tasks are incomplete for today, and schedule a one-off run of this daily cockpit automation to try again in 1 hour. Only proceed to the subsequent steps if both prerequisite tasks are confirmed complete today.
+2. Retrieve my calendar events for today from Google Calendar to identify scheduled commitments. If none, note that the calendar is open for deep work.
+3. Retrieve all pending tasks across Google Tasks. Categorize each task under an uppercase list prefix (List A = Academic/Admin, List B = Study/FMVA, List C = Personal/Daily, List D = Content/Social Media), sequentially index each task (e.g., [A1], [B1]), preserve the exact verbatim task titles, and sort deliverables dual-axis: chronologically by due time, then by strategic priority.
+4. List out the highest priority tasks separately under a dedicated focus section categorized from Critical to High.
+5. Search Gmail for recent unread emails, urgent action items, or administrative deadlines from the past 24–48 hours.
+6. Reference my Google Keep note titled "Weekly Schedule for Fall 2026" for today's classes and lectures, and provide a recommended execution flow distributing time blocks between deep focus, scheduled classes/discussions, and administrative tasks based on the day's schedule.
+7. Locate my Google Keep note titled "📌 Daily Cockpit" and update it with the synthesized brief. Use markdown headers (e.g., ## for section titles like "## ⏳ TIMELINE & COMMITMENTS", "## 🚨 HIGHEST PRIORITY FOCUS", "## 🎯 PRIORITIZED DELIVERABLES", "## 📬 INBOX & ACTION FLAGS", "## ⚡ EXECUTION FLOW") and ensure double line breaks between each bullet point, heading, and section so each item formats cleanly on its own distinct line in Google Keep without collapsing into paragraphs.
+8. Deliver the complete, formatted Daily Cockpit brief to me.
+9. Upon completing the execution (or if incomplete due to errors or blockers), append a status entry to my Google Keep note titled "Automation Execution Log" in the exact format:
+   "[Complete/Incomplete], [hh:mm 24-hour time in PST], [mm/dd/yyyy], Generate daily cockpit brief"
+   (e.g., "Complete, 09:30 PST, 10/03/2026, Generate daily cockpit brief").""
+
+
 /**
  * GDG UCSD - Daily Cockpit Apps Script Fallback
  * Ingests Calendar & Gmail data, calls Gemini API via UrlFetchApp, and logs the synthesized brief.
