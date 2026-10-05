@@ -1,20 +1,16 @@
 /**
  * LAYER 1 / SUPPORTING AUTOMATION 1: Smart Gmail & Spam Triage via Gemini AI
  * Runs daily at 8:00 AM (Scheduled cron or manual trigger)
- * 1. Pulls emails received in Inbox and Spam in the past 24 hours.
- * 2. Extracts compact metadata (Sender, Subject, 150-char snippet).
- * 3. Sends context to Gemini Flash for intelligent priority/spam classification[cite: 1, 2].
- * 4. Buffers plan in PropertiesService for zero-argument human approval[cite: 1, 2, 4].
+ * 1. Ingests emails received in Inbox and Spam in the past 24 hours[cite: 2, 4].
+ * 2. Extracts compact metadata (Sender, Subject, 150-char snippet)[cite: 2].
+ * 3. Sends context to Gemini Flash for intelligent priority/spam classification[cite: 2].
+ * 4. Buffers plan in PropertiesService for zero-argument human approval[cite: 2, 4].
  */
 
 function runSmartGmailTriageAI() {
-  // Directly accessible because Config.gs is in the same project!
-  Logger.log("Using model: " + MODEL_NAME); 
-  const rawResponse = callGeminiApiDirect(promptText);
-  // ...
-}
+  const timeZone = "America/Los_Angeles";
 
-  // 1. Ingest Inbox Emails (Past 24 Hours)[cite: 1, 2, 4]
+  // 1. Ingest Inbox Emails (Past 24 Hours)[cite: 2, 4]
   const inboxThreads = GmailApp.search("in:inbox newer_than:1d", 0, 20);
   const inboxPayload = inboxThreads.map(thread => {
     const firstMsg = thread.getMessages()[0];
@@ -29,7 +25,7 @@ function runSmartGmailTriageAI() {
     };
   });
 
-  // 2. Ingest Spam Emails (Past 24 Hours) to detect false positives[cite: 1, 2, 4]
+  // 2. Ingest Spam Emails (Past 24 Hours) to detect false positives[cite: 2, 4]
   const spamThreads = GmailApp.search("in:spam newer_than:1d", 0, 15);
   const spamPayload = spamThreads.map(thread => {
     const firstMsg = thread.getMessages()[0];
@@ -51,7 +47,7 @@ function runSmartGmailTriageAI() {
 
   Logger.log(`Ingested ${inboxPayload.length} inbox threads and ${spamPayload.length} spam threads.`);
 
-  // 3. Construct Gemini Prompt for Triage[cite: 1, 2, 4]
+  // 3. Construct Gemini Prompt for Triage[cite: 2, 4]
   const prompt = `
 You are the Smart Gmail Triage Engine for a university student.
 
@@ -80,7 +76,7 @@ ${JSON.stringify(spamPayload, null, 2)}
 `;
 
   Logger.log("🧠 Calling Gemini Flash for semantic email classification...");
-  const rawResponse = callGeminiApiDirect(prompt, apiKey, modelName);
+  const rawResponse = callGeminiApiDirect(prompt, GEMINI_API_KEY, MODEL_NAME);
 
   // Clean markdown delimiters if present
   const cleanedJson = rawResponse.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -92,11 +88,11 @@ ${JSON.stringify(spamPayload, null, 2)}
     throw new Error("Could not parse Gemini JSON response.");
   }
 
-  // 4. Staging Buffer: Save in PropertiesService for human approval[cite: 1, 2, 4]
+  // 4. Staging Buffer: Save in PropertiesService for human approval[cite: 2, 4]
   const userProperties = PropertiesService.getUserProperties();
   userProperties.setProperty("STAGED_GMAIL_PLAN", JSON.stringify(parsed));
 
-  // 5. Output Staged Briefing for Human Review[cite: 1, 2, 4]
+  // 5. Output Staged Briefing for Human Review[cite: 2, 4]
   Logger.log("\n================ 📬 GMAIL AI TRIAGE PROPOSAL ================");
   Logger.log("Summary: " + parsed.summary);
   Logger.log(`🚨 False Positives to Restore from Spam (${(parsed.restoreSpamThreadIds || []).length}): ` + (parsed.restoreSpamThreadIds || []).join(", "));
@@ -105,14 +101,14 @@ ${JSON.stringify(spamPayload, null, 2)}
   Logger.log("============================================================");
   Logger.log("👉 NEXT STEP TO APPROVE: Select 'approveAndCommitGmailTriage' in the function dropdown and click Run.\n");
 
-  // 6. Execution Status Log Entry (08:00 PST format)[cite: 1, 2, 4]
+  // 6. Execution Status Log Entry (08:00 PST format)[cite: 2, 4]
   const timeStr = Utilities.formatDate(new Date(), timeZone, "HH:mm");
   const dateStr = Utilities.formatDate(new Date(), timeZone, "MM/dd/yyyy");
   Logger.log(`[Activity Log]: • Staged, ${timeStr} PST, ${dateStr}, Gmail Triage Proposal Staged via AI`);
 }
 
 /**
- * HUMAN-IN-THE-LOOP COMMIT GATE (Zero-argument execution)[cite: 1, 2, 4]
+ * HUMAN-IN-THE-LOOP COMMIT GATE (Zero-argument execution)[cite: 2, 4]
  * Run this function from the dropdown to execute approved email updates.
  */
 function approveAndCommitGmailTriage() {
@@ -128,7 +124,7 @@ function approveAndCommitGmailTriage() {
   const importantLabel = getOrCreateLabel("Important Emails");
   const deletionLabel = getOrCreateLabel("Email for Deletion");
 
-  // 1. Restore false positives from spam -> inbox + Important[cite: 1, 2, 4]
+  // 1. Restore false positives from spam -> inbox + Important[cite: 2, 4]
   (stagedPlan.restoreSpamThreadIds || []).forEach(id => {
     try {
       const thread = GmailApp.getThreadById(id);
@@ -140,7 +136,7 @@ function approveAndCommitGmailTriage() {
     }
   });
 
-  // 2. Mark important inbox threads[cite: 1, 2, 4]
+  // 2. Mark important inbox threads[cite: 2, 4]
   (stagedPlan.importantThreadIds || []).forEach(id => {
     try {
       const thread = GmailApp.getThreadById(id);
@@ -151,7 +147,7 @@ function approveAndCommitGmailTriage() {
     }
   });
 
-  // 3. Label deletion candidates & archive from inbox[cite: 1, 2, 4]
+  // 3. Label deletion candidates & archive from inbox[cite: 2, 4]
   (stagedPlan.deletionThreadIds || []).forEach(id => {
     try {
       const thread = GmailApp.getThreadById(id);
@@ -162,7 +158,7 @@ function approveAndCommitGmailTriage() {
     }
   });
 
-  // Clear buffer on success[cite: 1, 4]
+  // Clear buffer on success[cite: 4]
   userProperties.deleteProperty("STAGED_GMAIL_PLAN");
   Logger.log("✅ Successfully executed approved Gmail label updates and cleanups.");
 }
@@ -171,7 +167,7 @@ function approveAndCommitGmailTriage() {
  * Gemini API Request Wrapper[cite: 1]
  */
 function callGeminiApiDirect(promptText, key, model) {
-  const url = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent?key=${key}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   
   const payload = {
     contents: [{ parts: [{ text: promptText }] }],
